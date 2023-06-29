@@ -26,7 +26,7 @@ pub EqualityExpr: ast::Expr = {
 
 pub EqualityOp: ast::OpInfix = {
     "==" => ast::OpInfix::Eq,
-    "!=" => ast::OpInfix::NEq,
+    "!=" => ast::OpInfix::Ne,
 }
 
 pub CmpExpr: ast::Expr = {
@@ -42,9 +42,9 @@ pub CmpExpr: ast::Expr = {
 
 pub CmpOp: ast::OpInfix = {
     ">" => ast::OpInfix::Gt,
-    ">=" => ast::OpInfix::GEq,
-    "<" => ast::OpInfix::Ls,
-    "<=" => ast::OpInfix::LEq,
+    ">=" => ast::OpInfix::Ge,
+    "<" => ast::OpInfix::Lt,
+    "<=" => ast::OpInfix::Le,
 }
 
 pub TermExpr: ast::Expr = {

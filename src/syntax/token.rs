@@ -1,9 +1,6 @@
 #![allow(dead_code)]
 
-use std::{
-    iter::Iterator,
-    ops::{Range, RangeBounds},
-};
+use std::iter::Iterator;
 
 use logos::{Lexer, Logos, SpannedIter};
 

@@ -11,10 +11,26 @@ pub enum Expr {
     Literal(ExprLiteral),
 }
 
+impl Display for Expr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Expr::Unary(u) => write!(f, "{}", u),
+            Expr::Binary(b) => write!(f, "{}", b),
+            Expr::Literal(l) => write!(f, "{}", l),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ExprUnary {
     pub op: OpPrefix,
     pub rhs: Box<Expr>,
+}
+
+impl Display for ExprUnary {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.op, self.rhs)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -24,12 +40,32 @@ pub struct ExprBinary {
     pub rhs: Box<Expr>,
 }
 
+impl Display for ExprBinary {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.op {
+            OpInfix::Assign => write!(f, "{} = {}", self.lhs, self.rhs),
+            _ => write!(f, "{} {} {}", self.lhs, self.op, self.rhs),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum ExprLiteral {
     Str(String),
     Bool(bool),
     Num(f64),
     Nil,
+}
+
+impl Display for ExprLiteral {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExprLiteral::Str(s) => write!(f, "\"{}\"", s),
+            ExprLiteral::Bool(b) => write!(f, "{}", b),
+            ExprLiteral::Num(n) => write!(f, "{}", n),
+            ExprLiteral::Nil => write!(f, "nil"),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -42,11 +78,11 @@ pub enum OpInfix {
     Assign,
 
     Gt,
-    Ls,
+    Lt,
     Eq,
-    NEq,
-    GEq,
-    LEq,
+    Ne,
+    Ge,
+    Le,
 
     And,
     Or,
@@ -61,11 +97,11 @@ impl Display for OpInfix {
             OpInfix::Div => write!(f, "/"),
             OpInfix::Assign => write!(f, "="),
             OpInfix::Gt => write!(f, ">"),
-            OpInfix::Ls => write!(f, "<"),
+            OpInfix::Lt => write!(f, "<"),
             OpInfix::Eq => write!(f, "=="),
-            OpInfix::NEq => write!(f, "!="),
-            OpInfix::GEq => write!(f, ">="),
-            OpInfix::LEq => write!(f, "<="),
+            OpInfix::Ne => write!(f, "!="),
+            OpInfix::Ge => write!(f, ">="),
+            OpInfix::Le => write!(f, "<="),
             OpInfix::And => write!(f, "&&"),
             OpInfix::Or => write!(f, "||"),
         }
