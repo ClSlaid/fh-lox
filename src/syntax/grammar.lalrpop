@@ -1,0 +1,162 @@
+use lalrpop_util::ParseError;
+
+use crate::syntax::token::Token;
+use crate::error::SyntaxError;
+use crate::types::Spanned;
+use crate::syntax::ast;
+
+grammar<'err>(
+    errors: &'err mut Vec<ParseError<usize, Token, Spanned<SyntaxError>>>
+);
+
+Spanned<T> : ast::Spanned<T> = <l: @L> <t: T> <r: @R> => (t, l..r);
+
+pub Expr = EqualityExpr;
+
+pub EqualityExpr: ast::Expr = {
+    <lhs: EqualityExpr> <op: EqualityOp> <rhs: CmpExpr> => {
+        ast::Expr::Binary(ast::ExprBinary{
+            lhs: Box::new(lhs),
+            op,
+            rhs: Box::new(rhs),
+        })
+    },
+    CmpExpr,
+}
+
+pub EqualityOp: ast::OpInfix = {
+    "==" => ast::OpInfix::Eq,
+    "!=" => ast::OpInfix::NEq,
+}
+
+pub CmpExpr: ast::Expr = {
+    <lhs: CmpExpr> <op: CmpOp> <rhs: TermExpr> => {
+        ast::Expr::Binary(ast::ExprBinary{
+            lhs: Box::new(lhs),
+            op,
+            rhs: Box::new(rhs),
+        })
+    },
+    TermExpr,
+}
+
+pub CmpOp: ast::OpInfix = {
+    ">" => ast::OpInfix::Gt,
+    ">=" => ast::OpInfix::GEq,
+    "<" => ast::OpInfix::Ls,
+    "<=" => ast::OpInfix::LEq,
+}
+
+pub TermExpr: ast::Expr = {
+    <lhs: TermExpr> <op: ExprOp> <rhs: FactorExpr> => {
+        ast::Expr::Binary(ast::ExprBinary{
+            lhs: Box::new(lhs),
+            op,
+            rhs: Box::new(rhs),
+        })
+    },
+
+    FactorExpr,
+}
+
+pub ExprOp: ast::OpInfix = {
+    "+" => ast::OpInfix::Add,
+    "-" => ast::OpInfix::Sub,
+}
+
+pub FactorExpr: ast::Expr = {
+    <lhs: FactorExpr> <op:FactorOp> <rhs: UnaryExpr> => {
+        ast::Expr::Binary(ast::ExprBinary{
+            lhs: Box::new(lhs),
+            op,
+            rhs: Box::new(rhs),
+        })
+    },
+
+    UnaryExpr
+}
+
+pub FactorOp: ast::OpInfix = {
+    "*" => ast::OpInfix::Mul,
+    "/" => ast::OpInfix::Div,
+}
+
+pub UnaryExpr: ast::Expr = {
+    <op: UnaryOp> <rhs: PrimaryExpr> => {
+        ast::Expr::Unary(ast::ExprUnary{
+            op,
+            rhs: Box::new(rhs),
+        })
+    },
+
+    PrimaryExpr,
+}
+
+pub UnaryOp: ast::OpPrefix = {
+    "-" => ast::OpPrefix::Neg,
+    "!" => ast::OpPrefix::Not,
+}
+
+pub PrimaryExpr: ast::Expr =  {
+    "nil" => ast::Expr::Literal(ast::ExprLiteral::Nil),
+    number => ast::Expr::Literal(ast::ExprLiteral::Num(<>)),
+    string => ast::Expr::Literal(ast::ExprLiteral::Str(<>)),
+    "true" => ast::Expr::Literal(ast::ExprLiteral::Bool(true)),
+    "false" => ast::Expr::Literal(ast::ExprLiteral::Bool(false)),
+    
+    // grouping
+    "(" <Expr> ")",
+}
+
+extern {
+    type Location = usize;
+    type Error = SyntaxError;
+
+    enum Token {
+        // Single-character tokens.
+        "(" => Token::LeftParen,
+        ")" => Token::RightParen,
+        "{" => Token::LeftBrace,
+        "}" => Token::RightBrace,
+        "," => Token::Comma,
+        "." => Token::Dot,
+        "-" => Token::Minus,
+        "+" => Token::Plus,
+        ";" => Token::Semicolon,
+        "/" => Token::Slash,
+        "*" => Token::Star,
+
+        // One or two character tokens.
+        "!" => Token::Bang,
+        "!=" => Token::BangEqual,
+        "=" => Token::Equal,
+        "==" => Token::EqualEqual,
+        ">" => Token::Greater,
+        ">=" => Token::GreaterEqual,
+        "<" => Token::Less,
+        "<=" => Token::LessEqual,
+
+        // Literals.
+        identifier => Token::Ident(<String>),
+        string => Token::Str(<String>),
+        number => Token::Num(<f64>),
+
+        // Keywords.
+        "and" => Token::And,
+        "class" => Token::Class,
+        "else" => Token::Else,
+        "false" => Token::False,
+        "for" => Token::For,
+        "fun" => Token::Fun,
+        "if" => Token::If,
+        "nil" => Token::Nil,
+        "or" => Token::Or,
+        "print" => Token::Print,
+        "return" => Token::Return,
+        "super" => Token::Super,
+        "this" => Token::This,
+        "true" => Token::True,
+        "var" => Token::Var,
+        "while" => Token::While,
+    }
+}

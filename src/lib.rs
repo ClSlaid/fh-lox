@@ -1,3 +1,5 @@
+#![feature(assert_matches)]
+
 pub mod error;
-mod scan;
-mod token;
+mod syntax;
+mod types;
