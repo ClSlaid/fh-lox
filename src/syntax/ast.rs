@@ -4,6 +4,30 @@ use std::fmt::Display;
 
 pub use crate::types::Spanned;
 
+pub type ExprS = Spanned<Expr>;
+pub type StmtS = Spanned<Stmt>;
+
+/// program
+#[derive(Debug, Clone)]
+pub struct Program {
+    pub stmts: Vec<StmtS>,
+}
+
+/// statement
+#[derive(Clone, Debug)]
+pub enum Stmt {
+    Var(Var),
+    Expr(ExprS),
+    Print(ExprS),
+    Empty,
+}
+
+#[derive(Clone, Debug)]
+pub struct Var {
+    pub name: String,
+    pub initializer: Option<ExprS>,
+}
+
 #[derive(Clone, Debug)]
 pub enum Expr {
     Unary(ExprUnary),
@@ -54,6 +78,7 @@ pub enum ExprLiteral {
     Str(String),
     Bool(bool),
     Num(f64),
+    Ident(String),
     Nil,
 }
 
@@ -63,6 +88,7 @@ impl Display for ExprLiteral {
             ExprLiteral::Str(s) => write!(f, "\"{}\"", s),
             ExprLiteral::Bool(b) => write!(f, "{}", b),
             ExprLiteral::Num(n) => write!(f, "{}", n),
+            ExprLiteral::Ident(id) => write!(f, "{}", id),
             ExprLiteral::Nil => write!(f, "nil"),
         }
     }

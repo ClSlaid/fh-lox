@@ -11,7 +11,69 @@ grammar<'err>(
 
 Spanned<T> : ast::Spanned<T> = <l: @L> <t: T> <r: @R> => (t, l..r);
 
-pub Expr = EqualityExpr;
+pub Program : ast::Program = <stmts: StmtS*> => ast::Program { <> };
+
+pub StmtS = Spanned<Stmt>;
+
+pub Stmt : ast::Stmt = {
+    VarStmt,
+    PrintStmt,
+    ExprStmt,
+    ";" =>  ast::Stmt::Empty ,
+}
+
+
+pub VarStmt : ast::Stmt = {
+    "var" <name: identifier> <initializer: ("=" <ExprS>)?> ";" => {
+        ast::Stmt::Var( ast::Var {name, initializer} )
+    }
+};
+
+pub PrintStmt : ast::Stmt = {
+    "print" <ExprS> ";" => {
+        ast::Stmt::Print(<>)
+    }
+}
+
+pub ExprStmt : ast::Stmt = <ExprS> ";" => ast::Stmt::Expr(<>);
+
+pub ExprS = Spanned<Expr>;
+
+pub Expr = AssignExpr;
+
+pub AssignExpr: ast::Expr = {
+    <lhs: identifier> "=" <rhs: LogicOrExpr> => {
+        let lhs = ast::Expr::Literal(ast::ExprLiteral::Ident(lhs));
+        ast::Expr::Binary(ast::ExprBinary{
+            lhs: Box::new(lhs),
+            op: ast::OpInfix::Assign,
+            rhs: Box::new(rhs),
+        })
+    },
+    LogicOrExpr,
+}
+
+pub LogicOrExpr: ast::Expr = {
+    <lhs: LogicOrExpr> "or" <rhs: LogicAndExpr> => {
+        ast::Expr::Binary(ast::ExprBinary{
+            lhs: Box::new(lhs),
+            op: ast::OpInfix::Or,
+            rhs: Box::new(rhs),
+        })
+    },
+    LogicAndExpr,
+}
+
+pub LogicAndExpr: ast::Expr = {
+    <lhs: LogicAndExpr> "and" <rhs: EqualityExpr> => {
+        ast::Expr::Binary(ast::ExprBinary{
+            lhs: Box::new(lhs),
+            op: ast::OpInfix::And,
+            rhs: Box::new(rhs),
+        })
+    },
+    EqualityExpr,
+}
 
 pub EqualityExpr: ast::Expr = {
     <lhs: EqualityExpr> <op: EqualityOp> <rhs: CmpExpr> => {
@@ -103,6 +165,7 @@ pub PrimaryExpr: ast::Expr =  {
     string => ast::Expr::Literal(ast::ExprLiteral::Str(<>)),
     "true" => ast::Expr::Literal(ast::ExprLiteral::Bool(true)),
     "false" => ast::Expr::Literal(ast::ExprLiteral::Bool(false)),
+    identifier => ast::Expr::Literal(ast::ExprLiteral::Ident(<>)),
     
     // grouping
     "(" <Expr> ")",

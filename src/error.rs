@@ -1,4 +1,7 @@
-use std::fmt::{self, Display, Formatter};
+use std::{
+    fmt::{self, Display, Formatter},
+    rc::Rc,
+};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error)]
@@ -44,8 +47,10 @@ impl Display for SyntaxError {
 #[derive(Debug, Clone, Error)]
 pub enum RuntimeError {
     StackOverflow,
+    UndefinedVariable(String),
     // TODO: implement type checker
     InappropriateType(String),
+    IOError(#[from] Rc<std::io::Error>),
 }
 
 impl Display for RuntimeError {
@@ -56,6 +61,12 @@ impl Display for RuntimeError {
             }
             RuntimeError::InappropriateType(s) => {
                 write!(f, "InappropriateType: {}", s)
+            }
+            RuntimeError::UndefinedVariable(s) => {
+                write!(f, "UndefinedVariable: {}", s)
+            }
+            RuntimeError::IOError(e) => {
+                write!(f, "IOError: {:?}", e)
             }
         }
     }

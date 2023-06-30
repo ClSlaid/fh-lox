@@ -1,11 +1,94 @@
-use std::fmt::Display;
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    io::{Read, Stdin, Stdout, Write},
+    ops::Range,
+    rc::Rc,
+};
 
 use crate::{
     error::RuntimeError,
-    syntax::{Expr, ExprBinary, ExprLiteral, ExprUnary, OpInfix, OpPrefix},
+    syntax::{
+        Expr, ExprBinary, ExprLiteral, ExprUnary, OpInfix, OpPrefix, Program, Stmt, Var as VarStmt,
+    },
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
+pub struct RuntimeContext<R, W>
+where
+    R: Read,
+    W: Write,
+{
+    vars: HashMap<String, EvalValue>,
+    #[allow(dead_code)]
+    input: R,
+    output: W,
+}
+
+// context on stdio
+impl RuntimeContext<Stdin, Stdout> {
+    /// quickly create a context that uses stdin and stdout
+    pub fn new_stdio() -> Self {
+        let stdin = std::io::stdin();
+        let stdout = std::io::stdout();
+        Self::new(stdin, stdout)
+    }
+}
+
+impl<R, W> RuntimeContext<R, W>
+where
+    R: Read,
+    W: Write,
+{
+    pub fn new(input: R, output: W) -> Self {
+        Self {
+            vars: HashMap::new(),
+            input,
+            output,
+        }
+    }
+
+    pub fn get(&self, name: &str) -> Option<&EvalValue> {
+        self.vars.get(name)
+    }
+
+    pub fn create(&mut self, name: &str) {
+        self.vars.insert(name.to_string(), EvalValue::Nil);
+    }
+
+    pub fn create_and_assign(&mut self, name: &str, value: EvalValue) {
+        self.vars.insert(name.to_string(), value);
+    }
+
+    pub fn assign(&mut self, name: &str, value: EvalValue) -> Result<(), RuntimeError> {
+        match self.vars.get_mut(name) {
+            Some(v) => {
+                *v = value;
+                Ok(())
+            }
+            None => Err(RuntimeError::UndefinedVariable(name.to_string())),
+        }
+    }
+
+    /// print values
+    pub fn println(&mut self, value: EvalValue) -> Result<(), RuntimeError> {
+        writeln!(self.output, "{}", value).map_err(|e| RuntimeError::IOError(Rc::new(e)))?;
+        self.output
+            .flush()
+            .map_err(|e| RuntimeError::IOError(Rc::new(e)))
+    }
+
+    /// print messages
+    pub fn print_msg(&mut self, msg: &str) -> Result<(), RuntimeError> {
+        write!(self.output, "{}", msg).map_err(|e| RuntimeError::IOError(Rc::new(e)))?;
+
+        self.output
+            .flush()
+            .map_err(|e| RuntimeError::IOError(Rc::new(e)))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum EvalValue {
     Num(f64),
     Bool(bool),
@@ -13,6 +96,7 @@ pub enum EvalValue {
     Unit,
     Nil,
     // TODO: support these types
+    // List(Vec<EvalValue>), // can this be made like GADT?
     // Tuple(Vec<EvalValue>),
     // NewType(String, Box<EvalValue>),
 }
@@ -29,14 +113,61 @@ impl Display for EvalValue {
     }
 }
 
-pub fn eval(expr: &Expr) -> Result<EvalValue, RuntimeError> {
-    eval_expr(expr)
+pub fn eval<R, W>(
+    program: &Program,
+    ctx: &mut RuntimeContext<R, W>,
+) -> Result<EvalValue, (RuntimeError, Range<usize>)>
+where
+    R: Read,
+    W: Write,
+{
+    let mut val = EvalValue::Unit;
+    for (stmt, range) in program.stmts.iter() {
+        val = eval_stmt(stmt, ctx).map_err(|e| (e, range.clone()))?;
+    }
+    Ok(val)
 }
 
-fn eval_expr(expr: &Expr) -> Result<EvalValue, RuntimeError> {
+fn eval_stmt<R, W>(stmt: &Stmt, ctx: &mut RuntimeContext<R, W>) -> Result<EvalValue, RuntimeError>
+where
+    R: Read,
+    W: Write,
+{
+    match stmt {
+        Stmt::Var(VarStmt { name, initializer }) => {
+            let val = match initializer {
+                Some((expr, _)) => eval_expr(expr, ctx)?,
+                None => EvalValue::Nil,
+            };
+            ctx.create_and_assign(name, val);
+        }
+        Stmt::Expr((expr, _)) => {
+            eval_expr(expr, ctx)?;
+        }
+        Stmt::Print((expr, _)) => {
+            let val = eval_expr(expr, ctx)?;
+            ctx.println(val)?;
+        }
+        Stmt::Empty => {
+            // do nothing
+        }
+    }
+    // currently, all statements will evaluate to Unit value
+    // this will change after block statements are introduced
+    Ok(EvalValue::Unit)
+}
+
+pub fn eval_expr<R, W>(
+    expr: &Expr,
+    ctx: &mut RuntimeContext<R, W>,
+) -> Result<EvalValue, RuntimeError>
+where
+    R: Read,
+    W: Write,
+{
     match expr {
         Expr::Unary(ExprUnary { op, rhs }) => {
-            let rhs_val = eval_expr(rhs)?;
+            let rhs_val = eval_expr(rhs, ctx)?;
             match op {
                 OpPrefix::Neg => {
                     if let EvalValue::Num(n) = rhs_val {
@@ -55,8 +186,18 @@ fn eval_expr(expr: &Expr) -> Result<EvalValue, RuntimeError> {
             Err(RuntimeError::InappropriateType(msg))
         }
         Expr::Binary(ExprBinary { lhs, op, rhs }) => {
-            let lhs_val = eval_expr(lhs)?;
-            let rhs_val = eval_expr(rhs)?;
+            let rhs_val = eval_expr(rhs, ctx)?;
+
+            // assignment should be handled separately
+            // the lhs should be an identifier and assign the rhs value to it
+            if let Expr::Literal(ExprLiteral::Ident(var)) = &**lhs {
+                if *op == OpInfix::Assign {
+                    ctx.assign(var, rhs_val)?;
+                    return Ok(EvalValue::Unit);
+                }
+            }
+
+            let lhs_val = eval_expr(lhs, ctx)?;
             match (lhs_val, rhs_val) {
                 (EvalValue::Num(l), EvalValue::Num(r)) => match op {
                     OpInfix::Add => Ok(EvalValue::Num(l + r)),
@@ -125,6 +266,14 @@ fn eval_expr(expr: &Expr) -> Result<EvalValue, RuntimeError> {
                 ExprLiteral::Bool(b) => EvalValue::Bool(*b),
                 ExprLiteral::Num(n) => EvalValue::Num(*n),
                 ExprLiteral::Nil => EvalValue::Nil,
+                ExprLiteral::Ident(i) => {
+                    let val = ctx.get(i).cloned();
+                    if val.is_none() {
+                        let err = RuntimeError::UndefinedVariable(i.clone());
+                        return Err(err);
+                    }
+                    val.unwrap()
+                }
             };
             Ok(v)
         }
@@ -133,15 +282,50 @@ fn eval_expr(expr: &Expr) -> Result<EvalValue, RuntimeError> {
 
 #[cfg(test)]
 mod eval_tests {
-    use crate::syntax::{ExprParser, SourceLexer};
+    use std::io::{BufWriter, Empty};
+
+    use crate::syntax::{ExprParser, ProgramParser, SourceLexer};
 
     use super::*;
+    type BufferOutputContext = RuntimeContext<Empty, BufWriter<Vec<u8>>>;
+
     fn evaled_expr_source(source: &str) -> Result<EvalValue, RuntimeError> {
+        let mut ctx = RuntimeContext::new_stdio();
+
         let lexer = SourceLexer::new(source);
         let mut errors = Vec::new();
         let parsed = ExprParser::new().parse(&mut errors, lexer);
         let expr = parsed.unwrap();
-        eval(&expr)
+        eval_expr(&expr, &mut ctx)
+    }
+
+    fn evaled_context(source: &str) -> Result<(EvalValue, BufferOutputContext), RuntimeError> {
+        let input = std::io::empty();
+        let output = BufWriter::new(vec![]);
+        let mut ctx = RuntimeContext::new(input, output);
+
+        let lexer = SourceLexer::new(source);
+        let mut errors = Vec::new();
+        let parsed = ProgramParser::new().parse(&mut errors, lexer);
+        let program = parsed.unwrap();
+        let v = eval(&program, &mut ctx).map_err(|(e, _)| e)?;
+        Ok((v, ctx))
+    }
+
+    #[test]
+    fn test_eval_named_calc() {
+        let source = r#"
+            var a = 1;
+            var b = 2;   
+            print a + b;
+            "#;
+        let evaled = evaled_context(source);
+        assert!(evaled.is_ok());
+        // check program output
+        let (v, ctx) = evaled.unwrap();
+        let dumped_output = ctx.output.into_inner().unwrap();
+        assert_eq!(dumped_output, b"3\n");
+        assert_eq!(v, EvalValue::Unit);
     }
 
     #[test]
